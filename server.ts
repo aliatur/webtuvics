@@ -26,12 +26,12 @@ async function startServer() {
         return res.status(400).json({ error: "Thiếu dữ liệu lá số Tử Vi." });
       }
 
-      // Bring Your Own Key (BYOK) model: Use custom client key if provided, else fall back to process env key
-      const finalApiKey = customApiKey || process.env.GEMINI_API_KEY;
+      // Bring Your Own Key (BYOK) model: Strictly require the user's personal API Key (do not fall back to developer's key)
+      const finalApiKey = customApiKey ? customApiKey.trim() : "";
 
-      if (!finalApiKey || finalApiKey === "MY_GEMINI_API_KEY") {
+      if (!finalApiKey) {
         return res.status(400).json({
-          error: "Chưa cấu hình API Key. Vui lòng thiết lập API Key của bạn trong mục 'Thiết lập API' hoặc liên hệ quản trị viên."
+          error: "Yêu cầu khóa API cá nhân: Quý vị chưa nhập hoặc lưu API Key của riêng mình. Vui lòng điền và lưu Google Gemini API Key chính chủ của bạn ở thanh cấu hình phía trên trước khi khởi động AI luận giải."
         });
       }
 

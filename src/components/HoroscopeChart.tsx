@@ -98,6 +98,21 @@ export const HoroscopeChart: React.FC<HoroscopeChartProps> = ({
     return list;
   }, [chart]);
 
+  const formatLunarDateVi = () => {
+    if (!chart || !chart.rawDates || !chart.rawDates.lunarDate) {
+      if (!chart || !chart.lunarDate) return "";
+      return chart.lunarDate.replace(/^\d+年/, "");
+    }
+    const { lunarDay, lunarMonth, lunarYear, isLeap } = chart.rawDates.lunarDate;
+    const yearCanChi = chart.chineseDate ? chart.chineseDate.split(" - ")[0] : "";
+    
+    const dayStr = lunarDay <= 10 ? `Mùng ${lunarDay}` : `Ngày ${lunarDay}`;
+    const monthStr = `tháng ${lunarMonth}${isLeap ? " nhuận" : ""}`;
+    const yearStr = yearCanChi ? `năm ${yearCanChi}` : `năm ${lunarYear}`;
+    
+    return `${dayStr} ${monthStr} ${yearStr}`;
+  };
+
   const highlightPalaceColor = (name: string, idx: number) => {
     let bg = "bg-stone-50/20";
     let border = "border-stone-200 dark:border-neutral-800";
@@ -329,38 +344,38 @@ export const HoroscopeChart: React.FC<HoroscopeChartProps> = ({
             </div>
 
             {/* Central Bio Details Grid */}
-            <div className="flex-1 py-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-stone-700 dark:text-neutral-300">
-              <div className="space-y-1.5">
+            <div className="flex-1 py-3 grid grid-cols-2 gap-x-4 gap-y-3 text-xs text-stone-700 dark:text-neutral-300">
+              <div className="space-y-1.5 min-w-0">
                 <span className="text-[10px] font-bold tracking-wider text-stone-400 uppercase block">Thời gian Dương Lịch</span>
-                <span className="font-semibold text-stone-900 dark:text-white flex items-center gap-1">
+                <span className="font-semibold text-stone-900 dark:text-white flex items-center gap-1 flex-wrap">
                   <Calendar className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                  {timezoneNormalization.originalDate} ({timezoneNormalization.originalTime})
+                  <span>{timezoneNormalization.originalDate} ({timezoneNormalization.originalTime})</span>
                 </span>
-                <span className="text-[10px] text-stone-400 block italic leading-tight">
+                <span className="text-[10px] text-stone-400 block italic leading-tight break-words">
                   Hiệu chỉnh: {finalSolarDateUsed} (GMT+7)
                 </span>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 min-w-0">
                 <span className="text-[10px] font-bold tracking-wider text-stone-400 uppercase block">Thời gian Âm Lịch</span>
-                <span className="font-bold text-stone-950 dark:text-white">
-                  Ngày {chart.lunarDate.replace(/^\d+年/, "")}
+                <span className="font-bold text-stone-950 dark:text-white block break-words">
+                  {formatLunarDateVi()}
                 </span>
-                <span className="text-[10px] text-stone-400 block italic leading-tight">
+                <span className="text-[10px] text-stone-400 block italic leading-tight break-words">
                   Khung giờ: Giờ {tuviGlobalHourResult.branchName} ({tuviGlobalHourResult.rangeStr})
                 </span>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 min-w-0">
                 <span className="text-[10px] font-bold tracking-wider text-stone-400 uppercase block">Tứ Trụ Can Chi</span>
-                <span className="font-semibold text-indigo-700 dark:text-indigo-400 whitespace-nowrap">
+                <span className="font-semibold text-indigo-700 dark:text-indigo-400 block break-words text-xs leading-normal">
                   {chart.chineseDate}
                 </span>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 min-w-0">
                 <span className="text-[10px] font-bold tracking-wider text-stone-400 uppercase block">Bản Mệnh / Ngũ Hành</span>
-                <span className="font-bold text-amber-700 dark:text-amber-500">
+                <span className="font-bold text-amber-700 dark:text-amber-500 block break-words text-xs leading-normal">
                   {chart.fiveElementsClass}
                 </span>
               </div>
