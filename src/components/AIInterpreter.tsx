@@ -1,6 +1,6 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
-import { Sparkles, Brain, Key, AlertTriangle, Eye, EyeOff, FileText, CheckCircle, RefreshCw } from "lucide-react";
+import { Sparkles, Brain, Key, AlertTriangle, Eye, EyeOff, FileText, CheckCircle, RefreshCw, BookOpen, Type, Palette, Volume2, VolumeX, ArrowLeft, X, Plus, Minus, Copy, Download } from "lucide-react";
 
 interface AIInterpreterProps {
   interpretation: string | null;
@@ -25,6 +25,172 @@ export const AIInterpreter: React.FC<AIInterpreterProps> = ({
 }) => {
   const [showKey, setShowKey] = React.useState<boolean>(false);
   const [saveStatus, setSaveStatus] = React.useState<boolean>(false);
+
+  // States for Chế độ đọc tối giản (Minimalist Reading Mode)
+  const [isMinimalMode, setIsMinimalMode] = React.useState<boolean>(() => {
+    return localStorage.getItem("tuvi_minimal_mode") === "true";
+  });
+  const [fontSize, setFontSize] = React.useState<number>(() => {
+    const saved = localStorage.getItem("tuvi_font_size");
+    return saved ? parseInt(saved, 10) : 16;
+  });
+  const [readerTheme, setReaderTheme] = React.useState<"cream" | "white" | "dark">(() => {
+    return (localStorage.getItem("tuvi_reader_theme") as "cream" | "white" | "dark") || "cream";
+  });
+  const [readerFontFamily, setReaderFontFamily] = React.useState<"serif" | "sans">("serif");
+  const [showBreathingGuide, setShowBreathingGuide] = React.useState<boolean>(true);
+  const [breathSec, setBreathSec] = React.useState<number>(0);
+
+  const breathPhase = React.useMemo(() => {
+    if (breathSec >= 0 && breathSec < 4) return "inhale";
+    if (breathSec >= 4 && breathSec < 6) return "hold";
+    return "exhale";
+  }, [breathSec]);
+  const [isAmbientOn, setIsAmbientOn] = React.useState<boolean>(false);
+  const [scrollPercent, setScrollPercent] = React.useState<number>(0);
+
+  const readerContainerRef = React.useRef<HTMLDivElement>(null);
+  const ambientAudioRef = React.useRef<{ audioCtx: AudioContext | null; gainNode: any } | null>(null);
+
+  // Synchronize browser body scrolling status of minimalist mode
+  React.useEffect(() => {
+    // We avoid hardlocking document.body.style.overflow = "hidden" inside sandboxed iframe wrappers,
+    // which can freeze user input. We ensure smooth native scroll interactions instead.
+    if (!isMinimalMode) {
+      stopZenAmbient();
+      setIsAmbientOn(false);
+    }
+  }, [isMinimalMode]);
+
+  // Handle breathing phase transitions automatically
+  React.useEffect(() => {
+    if (!isMinimalMode) return;
+    const interval = setInterval(() => {
+      setBreathSec((prev) => (prev + 1) % 10);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isMinimalMode]);
+
+  const startZenAmbient = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      
+      const bufferSize = 2 * ctx.sampleRate;
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+      
+      const whiteNoise = ctx.createBufferSource();
+      whiteNoise.buffer = noiseBuffer;
+      whiteNoise.loop = true;
+      
+      const waveNode = ctx.createBiquadFilter();
+      waveNode.type = "lowpass";
+      waveNode.frequency.value = 350;
+      
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = 0.05; // soft white noise breeze
+      
+      const lfoNode = ctx.createOscillator();
+      lfoNode.frequency.value = 0.1; // 10 second cycles matching breathing
+      
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = 180;
+      
+      lfoNode.connect(lfoGain);
+      lfoGain.connect(waveNode.frequency);
+      
+      whiteNoise.connect(waveNode);
+      waveNode.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      whiteNoise.start();
+      lfoNode.start();
+      
+      ambientAudioRef.current = { audioCtx: ctx, gainNode };
+    } catch (err) {
+      console.error("Audio failed configuration:", err);
+    }
+  };
+
+  const stopZenAmbient = () => {
+    if (ambientAudioRef.current?.audioCtx) {
+      try {
+        ambientAudioRef.current.audioCtx.close();
+      } catch (e) {}
+      ambientAudioRef.current = null;
+    }
+  };
+
+  const toggleAmbientSound = () => {
+    if (isAmbientOn) {
+      stopZenAmbient();
+      setIsAmbientOn(false);
+    } else {
+      startZenAmbient();
+      setIsAmbientOn(true);
+    }
+  };
+
+  const handleScrollDepth = () => {
+    if (readerContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = readerContainerRef.current;
+      const pct = (scrollTop / (scrollHeight - clientHeight)) * 100;
+      setScrollPercent(Math.min(isNaN(pct) ? 0 : pct, 100));
+    }
+  };
+
+  const exitMinimalMode = () => {
+    stopZenAmbient();
+    setIsAmbientOn(false);
+    setIsMinimalMode(false);
+    localStorage.setItem("tuvi_minimal_mode", "false");
+  };
+
+  const toggleMinimalMode = () => {
+    const next = !isMinimalMode;
+    setIsMinimalMode(next);
+    localStorage.setItem("tuvi_minimal_mode", String(next));
+  };
+
+  const handleFontSizeChange = (delta: number) => {
+    setFontSize(prev => {
+      const next = Math.min(24, Math.max(12, prev + delta));
+      localStorage.setItem("tuvi_font_size", String(next));
+      return next;
+    });
+  };
+
+  const changeReaderTheme = (theme: "cream" | "white" | "dark") => {
+    setReaderTheme(theme);
+    localStorage.setItem("tuvi_reader_theme", theme);
+  };
+
+  const [copied, setCopied] = React.useState<boolean>(false);
+
+  const handleCopyDestiny = () => {
+    if (!interpretation) return;
+    navigator.clipboard.writeText(interpretation);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadTxt = () => {
+    if (!interpretation) return;
+    const blob = new Blob([interpretation], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `So_Menh_Tu_Vi_Ban_Menh_AI.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // Save key to browser local storage for convenience
   const handleSaveKey = (e: React.FormEvent) => {
@@ -121,7 +287,7 @@ export const AIInterpreter: React.FC<AIInterpreterProps> = ({
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-stone-50 dark:bg-neutral-950 p-4 rounded-xl border border-stone-200 dark:border-neutral-800">
           <div className="space-y-1">
             <span className="text-[10px] font-bold tracking-wider text-stone-400 uppercase block">Cấu hình Bộ Não Luận Giải</span>
-            <div className="flex gap-4 items-center">
+            <div className="flex flex-wrap gap-4 items-center">
               <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-stone-700 dark:text-neutral-300">
                 <input
                   type="radio"
@@ -132,11 +298,11 @@ export const AIInterpreter: React.FC<AIInterpreterProps> = ({
                 />
                 <span className="flex items-center gap-1">
                   Gemini 3.5 Flash
-                  <span className="text-[9px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 px-1 rounded">Nhanh/Tối ưu</span>
+                  <span className="text-[9px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 px-1 rounded font-medium">Nhanh/Tối ưu</span>
                 </span>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-stone-700 dark:text-neutral-300">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-stone-700 dark:text-neutral-300" title="Bản Pro mới nhất thông thái và sâu sắc nhất">
                 <input
                   type="radio"
                   name="model_select"
@@ -145,10 +311,12 @@ export const AIInterpreter: React.FC<AIInterpreterProps> = ({
                   className="accent-indigo-600"
                 />
                 <span className="flex items-center gap-1">
-                  Gemini 3.1 Pro (Bình tinh tế)
-                  <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 px-1 rounded">Mạt sắc sâu</span>
+                  Gemini 3.1 Pro ✨
+                  <span className="text-[9px] bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 px-1 rounded font-bold">Mới nhất / Tinh hoa</span>
                 </span>
               </label>
+
+
             </div>
           </div>
 
@@ -298,23 +466,307 @@ export const AIInterpreter: React.FC<AIInterpreterProps> = ({
             </div>
           )
         ) : interpretation ? (
-          <div className="border border-stone-200 dark:border-neutral-800 rounded-xl p-6 bg-stone-50/50 dark:bg-stone-950/20 max-h-[700px] overflow-y-auto font-sans leading-relaxed text-stone-850 dark:text-neutral-200">
-            <div className="flex justify-between items-center pb-3 mb-6 border-b border-stone-200 dark:border-neutral-800">
-              <h4 className="font-bold text-stone-900 dark:text-white flex items-center gap-1.5 text-sm">
-                <FileText className="w-4 h-4 text-indigo-650" />
-                HỘ KIỆT BÌNH TOÀN CHI TIẾT LÁ SỐ
-              </h4>
-              <button
-                onClick={() => window.print()}
-                className="text-xs text-indigo-650 font-semibold border border-indigo-200 hover:bg-stone-100 p-1 px-3 rounded dark:border-neutral-700 dark:hover:bg-neutral-800"
-              >
-                In sớ mệnh (PDF)
-              </button>
+          <div className="space-y-4">
+            {/* Minimal/Standard Mode Toggle Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-stone-50 dark:bg-neutral-950 p-3 rounded-xl border border-stone-200 dark:border-neutral-800">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleMinimalMode}
+                  className="inline-flex items-center gap-2 px-4.5 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-indigo-600 text-white shadow-md shadow-indigo-500/10 hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 active:scale-98 transition-all cursor-pointer"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  Giao Diện Đọc Tối Giản (Zen Reader) 🧘
+                </button>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] text-stone-500 dark:text-neutral-400 font-medium">Sớ mệnh bản đồ:</span>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="text-xs text-stone-650 dark:text-stone-300 font-black border border-stone-250 dark:border-neutral-800 hover:bg-stone-100 p-1.5 px-3.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                  title="In lá số kèm sớ mệnh ra giấy hoặc lưu tệp PDF tiện lợi"
+                >
+                  🖨️ In sớ mệnh (PDF)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyDestiny}
+                  className="text-xs text-stone-650 dark:text-stone-300 font-black border border-stone-250 dark:border-neutral-800 hover:bg-stone-100 p-1.5 px-3.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                  title="Sao chép toàn bộ nội dung sớ mệnh luận giải"
+                >
+                  <Copy className="w-3.5 h-3.5 text-amber-600" />
+                  {copied ? "Đã sao chép!" : "Sao chép sớ"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadTxt}
+                  className="text-xs text-stone-650 dark:text-stone-300 font-black border border-stone-250 dark:border-neutral-800 hover:bg-stone-100 p-1.5 px-3.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                  title="Tải tệp văn bản sớ mệnh về lưu trữ"
+                >
+                  <Download className="w-3.5 h-3.5 text-indigo-650" />
+                  Tải (.txt)
+                </button>
+              </div>
             </div>
 
-            {/* Custom Markdown Renderer for PDF ready reports */}
-            <div className="markdown-body prose prose-stone dark:prose-invert max-w-none text-xs sm:text-sm space-y-6">
-              <ReactMarkdown>{interpretation}</ReactMarkdown>
+            {/* Immersive Zen Minimal Reader Overlay */}
+            {isMinimalMode && (
+              <div
+                className={`fixed inset-0 z-[100] flex flex-col overflow-hidden transition-all duration-300 ${
+                  readerTheme === "cream"
+                    ? "bg-[#fafaf6] dark:bg-[#181512] text-[#2c241e] dark:text-[#ebdcc8]"
+                    : readerTheme === "white"
+                    ? "bg-white text-stone-900 dark:bg-neutral-950 dark:text-neutral-50"
+                    : "bg-[#09090b] text-neutral-200"
+                }`}
+              >
+                {/* Scroll Progress Bar */}
+                <div className="absolute top-0 left-0 w-full h-1 bg-stone-150 dark:bg-neutral-900 z-[110]">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-600 transition-all duration-100"
+                    style={{ width: `${scrollPercent}%` }}
+                  />
+                </div>
+
+                {/* Reader Header */}
+                <header className="flex flex-wrap justify-between items-center px-4 py-3 sm:px-8 border-b border-stone-200/50 dark:border-neutral-800/50 bg-opacity-70 backdrop-blur-md sticky top-0 z-[110]">
+                  <button
+                    onClick={exitMinimalMode}
+                    className="flex items-center gap-2 text-xs font-black uppercase tracking-wider hover:opacity-80 p-2 px-4 rounded-xl border border-stone-350 hover:bg-stone-100 dark:hover:bg-neutral-900 transition-all cursor-pointer"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-indigo-650" />
+                    Thoát chế độ đọc
+                  </button>
+
+                  {/* Settings Panel */}
+                  <div className="flex flex-wrap items-center gap-4 text-xs">
+                    {/* Font selection */}
+                    <div className="flex bg-stone-100 dark:bg-neutral-900/60 p-0.5 rounded-xl border border-stone-200 dark:border-neutral-800">
+                      <button
+                        onClick={() => setReaderFontFamily("serif")}
+                        className={`px-3 py-1 rounded-lg font-serif font-black text-xs transition-all ${readerFontFamily === "serif" ? "bg-white dark:bg-neutral-850 shadow text-stone-950 dark:text-white" : "opacity-60"}`}
+                      >
+                        Serif
+                      </button>
+                      <button
+                        onClick={() => setReaderFontFamily("sans")}
+                        className={`px-3 py-1 rounded-lg font-sans font-black text-xs transition-all ${readerFontFamily === "sans" ? "bg-white dark:bg-neutral-850 shadow text-stone-950 dark:text-white" : "opacity-60"}`}
+                      >
+                        Sans
+                      </button>
+                    </div>
+
+                    {/* Font sizing */}
+                    <div className="flex items-center gap-1.5 bg-stone-100 dark:bg-neutral-900/60 px-2 py-0.5 rounded-xl border border-stone-200 dark:border-neutral-800">
+                      <button
+                        onClick={() => handleFontSizeChange(-1)}
+                        className="p-1 px-2.5 hover:bg-stone-200/40 dark:hover:bg-neutral-800 rounded font-bold text-stone-700 dark:text-neutral-300 transition-colors"
+                        title="Thu nhỏ chữ"
+                      >
+                        A⁻
+                      </button>
+                      <span className="font-mono text-[10px] font-black">{fontSize}px</span>
+                      <button
+                        onClick={() => handleFontSizeChange(1)}
+                        className="p-1 px-2.5 hover:bg-stone-200/40 dark:hover:bg-neutral-800 rounded font-bold text-stone-700 dark:text-neutral-300 transition-colors"
+                        title="Phóng to chữ"
+                      >
+                        A⁺
+                      </button>
+                    </div>
+
+                    {/* Reader themes */}
+                    <div className="flex items-center gap-1 bg-stone-100 dark:bg-neutral-900/60 p-1 rounded-xl border border-stone-200 dark:border-neutral-800">
+                      <button
+                        onClick={() => changeReaderTheme("cream")}
+                        className={`w-5.5 h-5.5 rounded-full border border-stone-300 bg-[#fafaf7] relative flex items-center justify-center ${
+                          readerTheme === "cream" ? "ring-2 ring-indigo-500 ring-offset-1" : ""
+                        }`}
+                        title="Nhã nhạc (Cổ thư)"
+                      >
+                        <span className="text-[9px] font-black">📖</span>
+                      </button>
+                      <button
+                        onClick={() => changeReaderTheme("white")}
+                        className={`w-5.5 h-5.5 rounded-full border border-stone-300 bg-white relative flex items-center justify-center ${
+                          readerTheme === "white" ? "ring-2 ring-indigo-500 ring-offset-1" : ""
+                        }`}
+                        title="Bản sớ (Sáng thanh tao)"
+                      >
+                        <span className="text-[9px] font-black">📄</span>
+                      </button>
+                      <button
+                        onClick={() => changeReaderTheme("dark")}
+                        className={`w-5.5 h-5.5 rounded-full border border-stone-800 bg-neutral-950 relative flex items-center justify-center ${
+                          readerTheme === "dark" ? "ring-2 ring-indigo-500 ring-offset-1" : ""
+                        }`}
+                        title="Huyền dạ (Đêm tĩnh tâm)"
+                      >
+                        <span className="text-[9px] font-black">🌙</span>
+                      </button>
+                    </div>
+
+                    {/* Ambient sound loops */}
+                    <button
+                      onClick={toggleAmbientSound}
+                      className={`p-1.5 px-3 rounded-xl border flex gap-1.5 items-center transition-all cursor-pointer ${
+                        isAmbientOn
+                          ? "bg-gradient-to-r from-amber-500 to-indigo-600 border-transparent text-white animate-pulse"
+                          : "border-stone-250 dark:border-neutral-850 hover:bg-stone-100"
+                      }`}
+                      title="Sóng âm thanh lọc khí kết nối bát tự giúp thông mượt vận số"
+                    >
+                      {isAmbientOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 opacity-70" />}
+                      <span className="text-[10px] font-bold uppercase tracking-wider">
+                        {isAmbientOn ? "Ambient: Mở" : "Âm thiền"}
+                      </span>
+                    </button>
+                  </div>
+                </header>
+
+                {/* Document reading engine */}
+                <div
+                  ref={readerContainerRef}
+                  onScroll={handleScrollDepth}
+                  className="flex-1 overflow-y-auto px-4 py-8 sm:px-8 sm:py-16 md:py-20 flex flex-col items-center select-text"
+                >
+                  <article
+                    className={`w-full max-w-2xl mx-auto space-y-8 tracking-wide leading-relaxed ${
+                      readerFontFamily === "serif" ? "font-serif" : "font-sans"
+                    }`}
+                    style={{ fontSize: `${fontSize}px` }}
+                  >
+                    {/* Visual Card Accent */}
+                    <div className="text-center pb-8 border-b border-dashed border-stone-200 dark:border-neutral-800 space-y-4">
+                      <span className="text-[10px] tracking-widest font-bold font-mono opacity-50 uppercase block">An nhiên thấu tỏ mạng vận</span>
+                      <h1 className="text-2.5xl sm:text-4xl font-black font-display tracking-tight leading-tight">
+                        HỘ KIỆT BÌNH TOÀN TẬP
+                      </h1>
+                      <p className="text-xs italic opacity-75 max-w-lg mx-auto leading-relaxed">
+                        "Lá số của bạn đang bị nghẽn ở đâu, đó chính là nơi bạn sinh ra để rèn luyện, hành động nhằm giúp lá số của mình được thông suốt và mượt mà hơn."
+                      </p>
+                    </div>
+
+                    {/* Styled Markdown inside */}
+                    <div
+                      className={`prose max-w-none transition-all duration-300 ${
+                        readerTheme === "cream"
+                          ? "text-[#2e261d] prose-stone prose-headings:text-[#1c140e] prose-headings:font-display prose-a:text-amber-800"
+                          : readerTheme === "white"
+                          ? "text-stone-850 dark:text-neutral-200 prose-stone dark:prose-invert"
+                          : "text-neutral-300 prose-invert prose-headings:text-neutral-100 prose-a:text-indigo-400"
+                      }`}
+                      style={{ fontSize: `${fontSize}px`, lineHeight: "2.1" }}
+                    >
+                      <ReactMarkdown>{interpretation}</ReactMarkdown>
+                    </div>
+
+                    {/* Book signature */}
+                    <div className="pt-12 border-t border-dashed border-stone-200 dark:border-neutral-800 text-center opacity-65 text-xs italic space-y-2 pb-16">
+                      <p>Khắc cốt ghi tâm, đức năng thắng số mệnh. Rèn tâm chính là hành động hoá giải.</p>
+                      <p className="font-mono text-[9px] font-extrabold tracking-widest uppercase mt-4 text-amber-600">
+                        HỘ KIỆT BÌNH TOÀN • TUỆ TỰ GIẢI THOÁT
+                      </p>
+                    </div>
+                  </article>
+                </div>
+
+                {/* Bottom Mindful Breathing guide to "rèn-hành" */}
+                {showBreathingGuide && (
+                  <div className="border-t border-stone-200/50 dark:border-neutral-800/80 bg-opacity-90 backdrop-blur-md p-3 px-6 sm:px-8 flex flex-col sm:flex-row justify-between items-center gap-3 text-xs z-[110]">
+                    <div className="flex items-center gap-3">
+                      <div className="w-5 h-5 rounded-full bg-indigo-500/10 border border-indigo-400/40 flex items-center justify-center relative shrink-0">
+                        <span className="absolute w-2.5 h-2.5 rounded-full bg-indigo-500 animate-breath" />
+                      </div>
+                      <div>
+                        <span className="font-extrabold text-[11px] tracking-tight block uppercase text-amber-600 dark:text-amber-500">
+                          Pháp rèn dưỡng khí hành tâm 🧘
+                        </span>
+                        <span className="text-[10px] opacity-70 leading-tight">
+                          Kết hợp đọc sớ mệnh với điều tiết hơi thở để khơi thông chướng khí tắc nghẽn của vận hạn.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <div className="bg-stone-100 dark:bg-neutral-900 border border-stone-200 dark:border-neutral-800 p-1 px-3.5 rounded-full text-[10px] font-bold tracking-wider flex items-center gap-2">
+                        <span className="opacity-60">Trạng thái rèn:</span>
+                        <span
+                          className={`uppercase font-mono text-[10px] p-0.5 px-2.5 rounded-full ${
+                            breathPhase === "inhale"
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400 animate-pulse"
+                              : breathPhase === "hold"
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400"
+                              : "bg-indigo-150 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-400 animate-pulse"
+                          }`}
+                        >
+                          {breathPhase === "inhale" ? "HÍT VÀO CHẬM (4s) ↗" : breathPhase === "hold" ? "NÍN THỞ NẰM GIỮ (2s) ○" : "THỞ RA ÊM (4s) ↘"}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => setShowBreathingGuide(false)}
+                        className="hover:opacity-100 opacity-60 p-1 hover:bg-stone-200/50 dark:hover:bg-neutral-800 rounded transition-colors"
+                        title="Đóng bảng thở hướng dẫn"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Standard rendering when not in distraction-free mode */}
+            <div className="border border-stone-200 dark:border-neutral-800 rounded-xl p-6 bg-stone-50/50 dark:bg-stone-950/20 font-sans leading-relaxed text-stone-850 dark:text-neutral-200">
+              <div className="flex justify-between items-center pb-3 mb-6 border-b border-stone-200 dark:border-neutral-800 animate-fadeIn">
+                <h4 className="font-bold text-stone-900 dark:text-white flex items-center gap-1.5 text-sm">
+                  <FileText className="w-4 h-4 text-indigo-650" />
+                  HỘ KIỆT BÌNH TOÀN CHI TIẾT LÁ SỐ
+                </h4>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setIsMinimalMode(true)}
+                    className="flex items-center gap-1 text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 p-1.5 px-3 rounded-lg dark:bg-amber-950/20 dark:text-amber-400 border border-amber-200/50 dark:border-amber-900/30 font-bold transition-all cursor-pointer"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    📖 Đọc Tối Giản
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="text-xs text-indigo-650 font-bold border border-indigo-250 p-1.5 px-3 rounded-lg dark:border-neutral-750 dark:hover:bg-neutral-800 hover:bg-stone-100 transition-all cursor-pointer flex items-center gap-1"
+                    title="In lá số kèm sớ mệnh ra giấy hoặc xuất tệp PDF"
+                  >
+                    🖨️ In sớ mệnh (PDF)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyDestiny}
+                    className="text-xs text-stone-650 dark:text-stone-350 font-bold border border-stone-250 p-1.5 px-3 rounded-lg dark:border-neutral-750 dark:hover:bg-neutral-800 hover:bg-stone-100 transition-all cursor-pointer flex items-center gap-1"
+                    title="Sao chép toàn bộ sớ mệnh vào bộ nhớ tạm"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-amber-600" />
+                    {copied ? "Đã sao chép!" : "Sao chép"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadTxt}
+                    className="text-xs text-stone-650 dark:text-stone-350 font-bold border border-stone-250 p-1.5 px-3 rounded-lg dark:border-neutral-750 dark:hover:bg-neutral-800 hover:bg-stone-100 transition-all cursor-pointer flex items-center gap-1"
+                    title="Tải tệp văn bản sớ mệnh về thiết bị"
+                  >
+                    <Download className="w-3.5 h-3.5 text-indigo-650" />
+                    Tải (.txt)
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Markdown Renderer for PDF ready reports */}
+              <div className="markdown-body prose prose-stone dark:prose-invert max-w-none text-xs sm:text-sm space-y-6">
+                <ReactMarkdown>{interpretation}</ReactMarkdown>
+              </div>
             </div>
           </div>
         ) : (
